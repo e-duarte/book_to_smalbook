@@ -7,79 +7,86 @@ import os
 import shutil
 from pathlib import Path
 
-def pdf_to_images_array(pdf):
-    images = convert_from_path(pdf)
-    image_array = [np.array(image) for image in images]
 
-    return image_array
-
-def concatenate_image(page_left, page_right):
-    return np.concatenate((page_left, page_right), axis=1)
-
-def build_livreto(images):
-    pages = []
-
-    # idx_left = len(images)
-
-    for i in range(int(len(images)/2)):
-        # idx_right = i
+class Livreto:
+    def __init__(self, pdf_path, dest_path):
+        self.pdf_file = Path(pdf_path)
+        self.dest = Path(dest_path)
         
+        self.images = self.pdf_to_images_array(self.pdf_file)
+        self.pages = self.build_livreto(self.images)
+        self.pages_path = [f"tmp/page_{i}.pdf" for i in range(len(self.pages))]
 
-        # img_right = images[i] if (idx_right+1) % 2 != 0 else images[-i - 1]
-        # img_left = images[-i - 1] if (idx_left) % 2 == 0 else images[i]
+    def pdf_to_images_array(self, pdf_path):
+        images = convert_from_path(pdf_path)
+        image_array = [np.array(image) for image in images]
 
-        # idx_right -= 1
+        return image_array
 
-        if (i + 1) % 2 == 0:
-            img_right = images[-i - 1]
-            img_left = images[i]
-        else:
-            img_right = images[i]
-            img_left = images[-i - 1]
+    def concatenate_image(self, page_left, page_right):
+        return np.concatenate((page_left, page_right), axis=1)
 
+    def append_blank_page(self, images):
+        blank_page = np.array(images[0], copy=True)
+        blank_page.fill(255)
+        images.append(blank_page)
 
-        
-        pages.append(concatenate_image(img_left, img_right))
-    
-    return pages
+        return images
 
-def save_page(page, filename):
-    im = Image.fromarray(page)
-    imrgb = im.convert('RGB')
+    def build_livreto(self, images):
+        images = self.append_blank_page(images) if (len(images) % 2) != 0 else images
+        pages = []
 
-    imrgb.save(filename)
+        for i in range(int(len(images)/2)):
+            if (i + 1) % 2 == 0:
+                img_right = images[-i - 1]
+                img_left = images[i]
+            else:
+                img_right = images[i]
+                img_left = images[-i - 1]
 
-def merge_pdfs(pdfs, merged_pdf_name, dest):
-    merger = PdfFileMerger()
+            pages.append(self.concatenate_image(img_left, img_right))
 
-    for path in pdfs:
-        merger.append(path)
+        return pages
 
-    merger.write(os.path.join(dest, merged_pdf_name))
+    def save_page(self, page, filename):
+        im = Image.fromarray(page)
+        imrgb = im.convert('RGB')
 
-    merger.close()
+        imrgb.save(filename)
 
-def main(original_pdf_path, dest):
-    pdf_file = Path(original_pdf_path)
+    def merge_pdfs(self):
+        merger = PdfFileMerger()
 
-    images = pdf_to_images_array(pdf_file)
+        print(self.pages_path)
+        print('aqui')
+        for path in self.pages_path:
+            merger.append(path)
 
-    pages = build_livreto(images)
+        merger.write(self.dest / self.pdf_file.name)
 
-    os.mkdir('./tmp')
+        merger.close()
 
-    for i, page in enumerate(pages):
-        save_page(page, f'tmp/page_{i}.pdf')
+    def create_temp_folder(self):
+        os.mkdir('tmp')
 
-    pages_path = [f'tmp/page_{i}.pdf' for i in range(len(pages))]
+    def delete_temp_folder(self):
+        shutil.rmtree('tmp')
 
-    merge_pdfs(pages_path, pdf_file.name, dest)
+    def generate_livreto(self):
+        self.create_temp_folder()
 
-    shutil.rmtree('./tmp')
+        for i, page in enumerate(self.pages):
+            self.save_page(page, f"tmp/page_{i}.pdf")
+
+        self.merge_pdfs()
+
+        self.delete_temp_folder()
 
 
 if __name__ == '__main__':
-    path_pdf = "/home/ewerton/Documents/Dulcineia/LIVROS PNA/cantigas_para_colorir.pdf"
-    main(path_pdf)
-
-
+    path_pdf = "/home/ewerton/Projects/book_to_smallbook-main/atividade eglia.pdf"
+    dest_path = "./"
+    
+    livreto = Livreto(path_pdf, dest_path)
+    livreto.generate_livreto()
